@@ -1,0 +1,139 @@
+name: 'Autograding'
+
+on:
+  push:
+    branches:
+      - '*'
+
+jobs:
+  build:
+
+    runs-on: [ubuntu-latest]
+    name: Build, test and autograde on Ubuntu
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK ${{ matrix.jdk }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 21
+          check-latest: true
+          cache: 'maven'
+      - name: Set up Maven
+        uses: stCarolas/setup-maven@v4.5
+        with:
+          maven-version: 3.9.5
+      - name: Setup Graphviz
+        uses: ts-graphviz/setup-graphviz@v1
+      - name: Build with Maven
+        run: mvn -V --color always -ntp clean verify -Ppit | tee maven.log
+      - name: Extract pull request number
+        uses: jwalton/gh-find-current-pr@v1
+        id: pr
+      - name: Run Autograding
+        uses: MuyleangIng/autu_grade@main
+        with:
+          github-token: ${{ secrets.GH_TOKEN }}
+          pr-number: ${{ steps.pr.outputs.number }}
+          checks-name: 'Quality Checks'
+          config: >
+            {
+              "tests": {
+                "tools": [
+                  {
+                    "id": "test",
+                    "name": "Unit Tests",
+                    "pattern": "**/target/*-reports/TEST*.xml"
+                  }
+                ],
+                "name": "Tests",
+                "passedImpact": 0,
+                "skippedImpact": -1,
+                "failureImpact": -5,
+                "maxScore": 100
+              },
+              "analysis": [
+                {
+                  "name": "Style",
+                  "id": "style",
+                  "tools": [
+                    {
+                      "id": "checkstyle",
+                      "name": "CheckStyle",
+                      "pattern": "**/target/checkstyle-result.xml"
+                    },
+                    {
+                      "id": "pmd",
+                      "name": "PMD",
+                      "pattern": "**/target/pmd.xml"
+                    },
+                    {
+                      "id": "error-prone",
+                      "name": "Error Prone",
+                      "pattern": "**/maven.log"
+                    }
+                  ],
+                  "errorImpact": -1,
+                  "highImpact": -1,
+                  "normalImpact": -1,
+                  "lowImpact": -1,
+                  "maxScore": 100
+                },
+                {
+                  "name": "Bugs",
+                  "id": "bugs",
+                  "icon": "bug",
+                  "tools": [
+                    {
+                      "id": "spotbugs",
+                      "name": "SpotBugs",
+                      "sourcePath": "src/main/java",
+                      "pattern": "**/target/spotbugsXml.xml"
+                    }
+                  ],
+                  "errorImpact": -2,
+                  "highImpact": -2,
+                  "normalImpact": -2,
+                  "lowImpact": -2,
+                  "maxScore": 100
+                }
+              ],
+              "coverage": [
+                {
+                  "tools": [
+                    {
+                      "id": "jacoco",
+                      "name": "Line Coverage",
+                      "metric": "line",
+                      "sourcePath": "src/main/java",
+                      "pattern": "**/target/site/jacoco/jacoco.xml"
+                    },
+                    {
+                      "id": "jacoco",
+                      "name": "Branch Coverage",
+                      "metric": "branch",
+                      "sourcePath": "src/main/java",
+                      "pattern": "**/target/site/jacoco/jacoco.xml"
+                    }
+                  ],
+                  "name": "Code Coverage", 
+                  "maxScore": 100,
+                  "missedPercentageImpact": -1
+                },
+                {
+                  "tools": [
+                    {
+                      "id": "pit",
+                      "name": "Mutation Coverage",
+                      "metric": "mutation",
+                      "sourcePath": "src/main/java",
+                      "pattern": "**/target/pit-reports/mutations.xml"
+                    }
+                  ],
+                  "name": "Mutation Coverage",
+                  "maxScore": 100,
+                  "missedPercentageImpact": -1
+                }
+              ]
+            }
